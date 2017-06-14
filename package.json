@@ -1,6 +1,7 @@
 {
   "name": "foundation-scripts",
   "version": "1.0.0",
+  "private": true,
   "description": "Scripts for use by the ZURB Template",
   "main": "index.js",
   "bin": {
