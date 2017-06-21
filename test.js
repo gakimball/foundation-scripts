@@ -2,11 +2,9 @@
 
 const scripts = require('.');
 
-describe('create()', function () {
-  const tmp = 'tmp';
-  this.timeout(0);
-
-  it('works?', () => {
-    scripts.create(tmp, process.cwd());
+describe('create()', () => {
+  it('works?', function () {
+    this.timeout(0);
+    return scripts.create('tmp', process.cwd());
   });
 });

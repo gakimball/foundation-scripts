@@ -81,10 +81,10 @@ const installDependencies = dir => {
 };
 
 // Create settings file
-const createSettingsFile = (dir, cb) => {
+const createSettingsFile = dir => {
   const options = {
     title: 'Foundation for Sites Settings',
-    output: './src/assets/styles/_settings.scss',
+    output: path.resolve(dir, 'src/assets/styles/_settings.scss'),
     groups: {
       grid: 'The Grid',
       'off-canvas': 'Off-canvas',
@@ -101,7 +101,7 @@ const createSettingsFile = (dir, cb) => {
     _foundationShim: true
   };
 
-  octophant('./node_modules/foundation-sites/scss', options, cb);
+  return octophant(path.resolve(dir, 'node_modules/foundation-sites/scss/**/*.scss'), options);
 };
 
 /**
@@ -126,7 +126,7 @@ module.exports = (name, dir = process.cwd()) => {
 
   spinner.text = 'Installing Foundation...';
   installDependencies(outputFolder);
-  createSettingsFile(outputFolder, () => {
+  return createSettingsFile(outputFolder).then(() => {
     spinner.succeed('All done!');
   });
 };
