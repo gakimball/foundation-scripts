@@ -1,35 +1,36 @@
 const path = require('path');
 const fs = require('fs');
-const {execSync} = require('child_process');
-const copyDir = require('copy-dir');
-const makeDir = require('make-dir');
+const pify = require('pify');
+const copyDir = pify(require('copy-dir'));
 const octophant = require('octophant');
 const ora = require('ora');
+const execa = require('execa');
 const config = require('../lib/config');
 const packageJson = require('../package.json');
 
+const writeFile = pify(fs.writeFile);
+
 // Make sure the name is valid and folder does not exist
-const preflight = dir => {
+const preflight = dir => new Promise((resolve, reject) => {
   const baseName = path.basename(dir);
 
-  if (baseName === '.') {
-    throw new Error('The name of your project can\'t start with a dot.');
+  if (baseName[0] === '.') {
+    reject(new Error('The name of your project can\'t start with a dot.'));
   }
 
-  try {
-    fs.accessSync(dir);
-  } catch (err) {
-    if (err.code !== 'ENOENT') {
-      throw new Error(`There's already a folder named ${baseName} here.`);
+  fs.access(dir, err => {
+    if (err && err.code === 'ENOENT') {
+      resolve();
+    } else {
+      reject(new Error(`There's already a folder named ${baseName} here.`));
     }
-  }
-};
+  });
+});
 
 // Create initial template
 const copyTemplate = dir => {
-  makeDir.sync(dir);
   const templateDir = path.resolve(__dirname, '../template');
-  copyDir.sync(templateDir, dir);
+  return copyDir(templateDir, dir);
 };
 
 // Build package.json
@@ -54,30 +55,24 @@ const writePackageJson = dir => {
     }
   };
 
-  fs.writeFileSync(outputPath, JSON.stringify(pkg, null, '  '));
+  return writeFile(outputPath, JSON.stringify(pkg, null, '  '));
 };
 
 // Install dependencies with yarn
 const installDependencies = dir => {
   const test = process.env.NODE_ENV === 'test';
+  const install = () => execa.shell('npm install --silent');
 
-  try {
-    if (test) {
-      execSync('npm link');
-    }
-
-    process.chdir(dir);
-
-    if (test) {
-      execSync('npm link foundation-scripts');
-    }
-
-    execSync('npm install');
-  } catch (err) {
-    console.log('Error running an npm command:');
-    console.log(err.stdout.toString());
-    console.log(err.stderr.toString());
+  if (test) {
+    return execa.shell('npm link')
+      .then(() => {
+        process.chdir(dir);
+        return execa.shell('npm link foundation-scripts');
+      })
+      .then(install);
   }
+
+  return install();
 };
 
 // Create settings file
@@ -114,19 +109,23 @@ module.exports = (name, dir = process.cwd()) => {
   const spinner = ora('Performing sanity checks...');
 
   spinner.start();
-  try {
-    preflight(outputFolder);
-  } catch (err) {
-    spinner.fail(err.message);
-  }
 
-  spinner.text = 'Setting up template files...';
-  copyTemplate(outputFolder);
-  writePackageJson(outputFolder);
-
-  spinner.text = 'Installing Foundation...';
-  installDependencies(outputFolder);
-  return createSettingsFile(outputFolder).then(() => {
-    spinner.succeed('All done!');
-  });
+  return preflight(outputFolder)
+    .then(() => {
+      spinner.text = 'Setting up template files...';
+      return copyTemplate(outputFolder);
+    })
+    .then(() => writePackageJson(outputFolder))
+    .then(() => {
+      spinner.text = 'Installing Foundation...';
+      return installDependencies(outputFolder);
+    })
+    .then(() => createSettingsFile(outputFolder))
+    .then(() => {
+      spinner.succeed('All done!');
+    })
+    .catch(err => {
+      spinner.fail(err.message);
+      console.log(err);
+    });
 };
